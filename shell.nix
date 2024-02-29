@@ -8,5 +8,9 @@ mkShell {
   buildInputs = [
     rustup
     probe-rs
+
+    # For cargo-embassy
+    pkg-config
+    udev
   ];
 }
