@@ -55,20 +55,66 @@ impl Lis3dsh {
     pub fn init(&mut self) -> Result<(), Error> {
         let mut buf = [Self::make_address_byte(Self::REG_WHO_AM_I, true), 0x00];
         self.cs.set_low();
-        self.spi.blocking_transfer_in_place(&mut buf).unwrap();
+        self.spi.blocking_transfer_in_place(&mut buf)?;
         self.cs.set_high();
 
         let id_byte = buf[1];
-
-        if id_byte == Self::WHO_AM_I {
-            Ok(())
-        } else {
-            Err(Error::WhoAmIMismatch)
+        if id_byte != Self::WHO_AM_I {
+            return Err(Error::WhoAmIMismatch);
         }
+
+        buf[0] = Self::make_address_byte(Self::REG_CTRL_4, false);
+        buf[1] = 0b01100111;
+        self.cs.set_low();
+        self.spi.blocking_transfer_in_place(&mut buf)?;
+        self.cs.set_high();
+
+        buf[0] = Self::make_address_byte(Self::REG_CTRL_5, false);
+        buf[1] = 0b00001000;
+        self.cs.set_low();
+        self.spi.blocking_transfer_in_place(&mut buf)?;
+        self.cs.set_high();
+
+        Ok(())
+    }
+
+    pub fn read_raw_accel(&mut self) -> Result<RawAccel, Error> {
+        let mut buf = [
+            Self::make_address_byte(0x28, true),
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ];
+        self.cs.set_low();
+        self.spi.blocking_transfer_in_place(&mut buf)?;
+        self.cs.set_high();
+
+        Ok(RawAccel {
+            x: (buf[1] as u16) | ((buf[2] as u16) << 8),
+            y: (buf[3] as u16) | ((buf[4] as u16) << 8),
+            z: (buf[5] as u16) | ((buf[6] as u16) << 8),
+        })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, defmt::Format)]
+pub struct RawAccel {
+    x: u16,
+    y: u16,
+    z: u16,
+}
+
+#[derive(Debug, defmt::Format)]
 pub enum Error {
     WhoAmIMismatch,
+    SpiError(spi::Error),
+}
+
+impl From<spi::Error> for Error {
+    fn from(value: spi::Error) -> Error {
+        Error::SpiError(value)
+    }
 }
