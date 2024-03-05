@@ -40,13 +40,13 @@ async fn main(_spawner: Spawner) {
 
         config
     };
-    let mut p = embassy_stm32::init(config);
+    let p = embassy_stm32::init(config);
 
     let mut accel = lis3dsh::Lis3dsh::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.PE3);
     accel.init().unwrap();
 
     loop {
-        info!("{:?}", accel.read_raw_accel());
+        info!("{:?}", accel.read_raw_accel().unwrap());
         Timer::after_millis(100).await;
     }
 }

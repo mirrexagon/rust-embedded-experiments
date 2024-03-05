@@ -93,18 +93,18 @@ impl Lis3dsh {
         self.cs.set_high();
 
         Ok(RawAccel {
-            x: (buf[1] as u16) | ((buf[2] as u16) << 8),
-            y: (buf[3] as u16) | ((buf[4] as u16) << 8),
-            z: (buf[5] as u16) | ((buf[6] as u16) << 8),
+            x: (buf[1] as i16) | ((buf[2] as i16) << 8),
+            y: (buf[3] as i16) | ((buf[4] as i16) << 8),
+            z: (buf[5] as i16) | ((buf[6] as i16) << 8),
         })
     }
 }
 
 #[derive(Debug, defmt::Format)]
 pub struct RawAccel {
-    x: u16,
-    y: u16,
-    z: u16,
+    x: i16,
+    y: i16,
+    z: i16,
 }
 
 #[derive(Debug, defmt::Format)]
