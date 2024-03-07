@@ -1,12 +1,9 @@
 #![no_std]
 #![no_main]
 
-mod fmt;
 mod lis3dsh;
 
-#[cfg(not(feature = "defmt"))]
-use panic_halt as _;
-#[cfg(feature = "defmt")]
+use defmt::*;
 use {defmt_rtt as _, panic_probe as _};
 
 use embassy_executor::Spawner;
@@ -16,8 +13,6 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::timer;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_time::Timer;
-
-use fmt::info;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {

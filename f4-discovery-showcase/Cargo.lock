@@ -235,9 +235,6 @@ name = "embassy-futures"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f878075b9794c1e4ac788c95b728f26aa6366d32eeb10c7051389f898f7d067"
-dependencies = [
- "defmt",
-]
 
 [[package]]
 name = "embassy-hal-internal"
@@ -436,11 +433,8 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "embassy-executor",
- "embassy-futures",
  "embassy-stm32",
- "embassy-sync",
  "embassy-time",
- "panic-halt",
  "panic-probe",
 ]
 
@@ -577,12 +571,6 @@ checksum = "da0df0e5185db44f69b44f26786fe401b6c293d1907744beaa7fa62b2e5a517a"
 dependencies = [
  "autocfg",
 ]
-
-[[package]]
-name = "panic-halt"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
 
 [[package]]
 name = "panic-probe"

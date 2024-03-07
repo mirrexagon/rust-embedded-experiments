@@ -1,10 +1,9 @@
+use defmt::*;
 use embassy_stm32::dma;
 use embassy_stm32::gpio;
 use embassy_stm32::peripherals;
 use embassy_stm32::spi;
 use embassy_stm32::time::Hertz;
-
-use crate::fmt::info;
 
 // LIS3DSH accelerometer is connected to SPI1:
 //
