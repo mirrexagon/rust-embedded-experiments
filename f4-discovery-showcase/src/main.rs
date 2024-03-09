@@ -7,16 +7,30 @@ use defmt::*;
 use {defmt_rtt as _, panic_probe as _};
 
 use embassy_executor::Spawner;
+use embassy_stm32::dma::NoDma;
 use embassy_stm32::gpio;
-use embassy_stm32::gpio::OutputType;
+use embassy_stm32::gpio::{Level, Output, OutputType, Speed};
+use embassy_stm32::peripherals;
+use embassy_stm32::spi;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::timer;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_time::Timer;
 
+use embassy_sync::blocking_mutex::NoopMutex;
+
+use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
+
+use static_cell::StaticCell;
+
+use core::cell::RefCell;
+
+static SPI1_BUS: StaticCell<NoopMutex<RefCell<spi::Spi<peripherals::SPI1, NoDma, NoDma>>>> =
+    StaticCell::new();
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let config = {
+    let p = {
         let mut config = embassy_stm32::Config::default();
         use embassy_stm32::rcc::*;
 
@@ -37,13 +51,28 @@ async fn main(_spawner: Spawner) {
         config.rcc.apb2_pre = APBPrescaler::DIV2;
         config.rcc.sys = Sysclk::PLL1_P;
 
-        config
+        embassy_stm32::init(config)
     };
-    let p = embassy_stm32::init(config);
+
+    let spi1_bus = {
+        let sck = p.PA5;
+        let mosi = p.PA7;
+        let miso = p.PA6;
+        let mut config = spi::Config::default();
+        config.frequency = Hertz(lis3dsh::MAXIMUM_SPI_FREQUENCY_HZ);
+
+        let spi = spi::Spi::new(p.SPI1, sck, mosi, miso, NoDma, NoDma, config);
+        let spi_bus = NoopMutex::new(RefCell::new(spi));
+        SPI1_BUS.init(spi_bus)
+    };
 
     // Accelerometer init
-    let mut accel = lis3dsh::Lis3dsh::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.PE3);
-    accel.init().unwrap();
+    let mut accel = {
+        let cs = Output::new(p.PE3, Level::High, Speed::Low);
+        let spi_device = SpiDevice::new(spi1_bus, cs);
+        lis3dsh::Lis3dsh::new(spi_device)
+    };
+    unwrap!(accel.init());
 
     // LEDs init
     //
@@ -102,7 +131,8 @@ async fn main(_spawner: Spawner) {
             Timer::after_millis(1).await;
         }
 
-        //info!("{:?}", accel.read_raw_accel().unwrap());
-        //Timer::after_millis(100).await;
+        info!("{:?}", unwrap!(accel.read_raw_accel()));
+
+        Timer::after_millis(100).await;
     }
 }
