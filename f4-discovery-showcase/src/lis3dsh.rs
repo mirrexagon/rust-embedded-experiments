@@ -55,7 +55,7 @@ where
             0x00,
         ];
 
-        self.spi.transfer_in_place(&mut buf).map_err(Error::Spi)?;
+        self.spi.transfer_in_place(&mut buf)?;
 
         Ok(RawAccel {
             x: (buf[1] as i16) | ((buf[2] as i16) << 8),
@@ -68,7 +68,7 @@ where
         let register = Self::make_address_byte(register as u8, true);
         let mut buf = [register, 0];
 
-        self.spi.transfer_in_place(&mut buf).map_err(Error::Spi)?;
+        self.spi.transfer_in_place(&mut buf)?;
 
         Ok(buf[1])
     }
@@ -80,7 +80,7 @@ where
     ) -> Result<(), Error<SPI::Error>> {
         let register = Self::make_address_byte(register as u8, false);
 
-        self.spi.write(&[register, value]).map_err(Error::Spi)?;
+        self.spi.write(&[register, value])?;
 
         Ok(())
     }
@@ -256,4 +256,10 @@ pub struct RawAccel {
 pub enum Error<SPIError> {
     WhoAmIMismatch,
     Spi(SPIError),
+}
+
+impl<SPIError> From<SPIError> for Error<SPIError> {
+    fn from(value: SPIError) -> Self {
+        Self::Spi(value)
+    }
 }
