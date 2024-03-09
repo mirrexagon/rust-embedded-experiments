@@ -1,6 +1,21 @@
 #![no_std]
 #![no_main]
 
+// Hardware available:
+// - Accelerometer (LIS3DSH) connected to SPI1
+// - Digital microphone (MP45DT02)
+// - audio DAC with integrated class D speaker driver (CS43L22)
+// - PWMable LEDs
+// - One user momentary button
+// - USB OTG Micro-AB connector (host or device)
+
+// Functionality:
+// - When board is tilted, the LEDs light up following the direction and amount of tilt.
+// - The DAC outputs a signal with frequency/pitch determined by amount of tilt.
+// - While the user button is held, a song plays from the DAC instead (including a vibrato effect).
+// - The board presents as a USB audio device with one mono input (onboard mic) and one stereo input, mimicking the DAC output.
+//   - Could present the DAC as a stereo output, but mimicking the DAC output shows the cross-communication between the sound generation, the DAC output, and the USB audio.
+
 mod lis3dsh;
 
 use defmt::*;
