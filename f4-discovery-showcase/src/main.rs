@@ -12,15 +12,16 @@
 // Functionality:
 // - When board is tilted, the LEDs light up following the direction and amount of tilt.
 // - The DAC outputs a signal with frequency/pitch determined by amount of tilt.
-// - While the user button is held, a song plays from the DAC instead (including a vibrato effect).
+// - While the user button is held, a song plays from the DAC instead (including a vibrato effect), and the LEDs brightness corresponds to the intensity of the sound.
 // - The board presents as a USB audio device with one mono input (onboard mic) and one stereo input, mimicking the DAC output.
 //   - Could present the DAC as a stereo output, but mimicking the DAC output shows the cross-communication between the sound generation, the DAC output, and the USB audio.
 
 mod lis3dsh;
 
-use defmt::*;
-use {defmt_rtt as _, panic_probe as _};
+use core::cell::RefCell;
+use num_traits::float::FloatCore;
 
+use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_stm32::dma::NoDma;
 use embassy_stm32::gpio;
@@ -31,16 +32,16 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::timer;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_time::Timer;
-
 use embassy_sync::blocking_mutex::{raw::NoopRawMutex, NoopMutex};
 use embassy_sync::signal::Signal;
+use embassy_time::Timer;
 
-use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
+use lis3dsh::RawAccel;
 
 use static_cell::StaticCell;
 
-use core::cell::RefCell;
+use defmt::*;
+use {defmt_rtt as _, panic_probe as _};
 
 static SPI1_BUS: StaticCell<NoopMutex<RefCell<spi::Spi<peripherals::SPI1, NoDma, NoDma>>>> =
     StaticCell::new();
@@ -108,7 +109,8 @@ async fn accel_task(
     loop {
         let raw_accel = unwrap!(accel.read_raw_accel());
         RAW_ACCEL_SIGNAL.signal(raw_accel);
-        Timer::after_millis(100).await;
+        info!("{:?}", raw_accel);
+        Timer::after_millis(10).await;
     }
 }
 
@@ -140,36 +142,41 @@ async fn led_task(
         Hertz::khz(10),
         Default::default(),
     );
-    let mut max_duty = pwm.get_max_duty();
+    let mut max_duty = pwm.get_max_duty() as f32;
     pwm.enable(timer::Channel::Ch1);
     pwm.enable(timer::Channel::Ch2);
     pwm.enable(timer::Channel::Ch3);
     pwm.enable(timer::Channel::Ch4);
 
-    max_duty /= 4;
+    // Above this, there is no visible difference to the brightness of the LEDs.
+    max_duty /= 4.0;
 
-    let mut set_duty = |duty| {
-        pwm.set_duty(timer::Channel::Ch1, duty);
-        pwm.set_duty(timer::Channel::Ch2, duty);
-        pwm.set_duty(timer::Channel::Ch3, duty);
-        pwm.set_duty(timer::Channel::Ch4, duty);
-    };
+    let mut set_north =
+        |intensity: f32| pwm.set_duty(timer::Channel::Ch2, (intensity * max_duty) as u16);
+    let mut set_east =
+        |intensity: f32| pwm.set_duty(timer::Channel::Ch3, (intensity * max_duty) as u16);
+    let mut set_south =
+        |intensity: f32| pwm.set_duty(timer::Channel::Ch4, (intensity * max_duty) as u16);
+    let mut set_west =
+        |intensity: f32| pwm.set_duty(timer::Channel::Ch1, (intensity * max_duty) as u16);
+
+    // With the silkscreen upright, mini-USB at top:
+    //
+    // Tilt board so red LED (east) goes down , X increases
+    // Tilt board so blue LED (south) goes down, Y decreases
+
+    // Let's model the LEDs as being on a plane one unit each from the origin.
+    // A point is placed some distance above the origin
+    // As the board rotates, the LED plane rotates to match, but the point stays stationary.
+    // An LED's intensity is determined by its distance from the point - closer is more intense.
 
     loop {
-        let mut duty = 0;
+        let RawAccel { x, y, z } = RAW_ACCEL_SIGNAL.wait().await;
 
-        info!("Start up");
-        while duty < max_duty {
-            set_duty(duty);
-            duty += 1;
-            Timer::after_millis(1).await;
-        }
+        let x = x as f32;
+        let y = y as f32;
+        let z = z as f32;
 
-        info!("Start down");
-        while duty > 0 {
-            set_duty(duty);
-            duty -= 1;
-            Timer::after_millis(1).await;
-        }
+        let magnitude = (x.powi(2) + y.powi(2) + z.powi(2)).sqrt();
     }
 }

@@ -250,9 +250,9 @@ pub enum Register {
 
 #[derive(Copy, Clone, Debug, defmt::Format)]
 pub struct RawAccel {
-    x: i16,
-    y: i16,
-    z: i16,
+    pub x: i16,
+    pub y: i16,
+    pub z: i16,
 }
 
 #[derive(Copy, Clone, Debug, defmt::Format)]
