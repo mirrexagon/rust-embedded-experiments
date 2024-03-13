@@ -30,9 +30,11 @@ use embassy_stm32::spi;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::timer;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::Timer;
 
-use embassy_sync::blocking_mutex::NoopMutex;
+use embassy_sync::blocking_mutex::{raw::NoopRawMutex, NoopMutex};
+use embassy_sync::signal::Signal;
 
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 
@@ -43,8 +45,10 @@ use core::cell::RefCell;
 static SPI1_BUS: StaticCell<NoopMutex<RefCell<spi::Spi<peripherals::SPI1, NoDma, NoDma>>>> =
     StaticCell::new();
 
+static RAW_ACCEL_SIGNAL: Signal<CriticalSectionRawMutex, lis3dsh::RawAccel> = Signal::new();
+
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     let p = {
         let mut config = embassy_stm32::Config::default();
         use embassy_stm32::rcc::*;
@@ -81,16 +85,41 @@ async fn main(_spawner: Spawner) {
         SPI1_BUS.init(spi_bus)
     };
 
-    // Accelerometer init
+    unwrap!(spawner.spawn(accel_task(spi1_bus, p.PE3)));
+    unwrap!(spawner.spawn(led_task(p.PD12, p.PD13, p.PD14, p.PD15, p.TIM4)));
+
+    loop {
+        Timer::after_secs(1).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn accel_task(
+    spi1_bus: &'static NoopMutex<RefCell<spi::Spi<'static, peripherals::SPI1, NoDma, NoDma>>>,
+    cs: peripherals::PE3,
+) {
     let mut accel = {
-        let cs = Output::new(p.PE3, Level::High, Speed::Low);
+        let cs = Output::new(cs, Level::High, Speed::Low);
         let spi_device = SpiDevice::new(spi1_bus, cs);
         lis3dsh::Lis3dsh::new(spi_device)
     };
     unwrap!(accel.init());
 
-    // LEDs init
-    //
+    loop {
+        let raw_accel = unwrap!(accel.read_raw_accel());
+        RAW_ACCEL_SIGNAL.signal(raw_accel);
+        Timer::after_millis(100).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn led_task(
+    pd12: peripherals::PD12,
+    pd13: peripherals::PD13,
+    pd14: peripherals::PD14,
+    pd15: peripherals::PD15,
+    tim4: peripherals::TIM4,
+) {
     // With silkscreen upright, mini-USB at top:
     //
     // Green, west, PD12 - TIM4_CH1
@@ -98,12 +127,12 @@ async fn main(_spawner: Spawner) {
     // Red, east, PD14 - TIM4_CH3
     // Blue, south, PD15 - TIM4_CH4
 
-    let ch1 = PwmPin::new_ch1(p.PD12, OutputType::PushPull);
-    let ch2 = PwmPin::new_ch2(p.PD13, OutputType::PushPull);
-    let ch3 = PwmPin::new_ch3(p.PD14, OutputType::PushPull);
-    let ch4 = PwmPin::new_ch4(p.PD15, OutputType::PushPull);
+    let ch1 = PwmPin::new_ch1(pd12, OutputType::PushPull);
+    let ch2 = PwmPin::new_ch2(pd13, OutputType::PushPull);
+    let ch3 = PwmPin::new_ch3(pd14, OutputType::PushPull);
+    let ch4 = PwmPin::new_ch4(pd15, OutputType::PushPull);
     let mut pwm = SimplePwm::new(
-        p.TIM4,
+        tim4,
         Some(ch1),
         Some(ch2),
         Some(ch3),
@@ -116,9 +145,6 @@ async fn main(_spawner: Spawner) {
     pwm.enable(timer::Channel::Ch2);
     pwm.enable(timer::Channel::Ch3);
     pwm.enable(timer::Channel::Ch4);
-
-    info!("PWM initialized");
-    info!("PWM max duty {}", max_duty);
 
     max_duty /= 4;
 
@@ -145,9 +171,5 @@ async fn main(_spawner: Spawner) {
             duty -= 1;
             Timer::after_millis(1).await;
         }
-
-        info!("{:?}", unwrap!(accel.read_raw_accel()));
-
-        Timer::after_millis(100).await;
     }
 }

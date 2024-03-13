@@ -38,7 +38,10 @@ where
             return Err(Error::WhoAmIMismatch);
         }
 
-        self.write_register_u8(Register::CTRL_REG4, 0b0110_0111)?;
+        // Enable XYZ axes, set output data rate to 100 Hz.
+        self.write_register_u8(Register::CTRL_REG4, 0b0110_1111)?;
+
+        // Set FSCALE to +/- 4g.
         self.write_register_u8(Register::CTRL_REG5, 0b0000_1000)?;
 
         Ok(())
