@@ -19,7 +19,6 @@
 mod lis3dsh;
 
 use core::cell::RefCell;
-use num_traits::float::FloatCore;
 
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 use embassy_executor::Spawner;
@@ -36,9 +35,11 @@ use embassy_sync::blocking_mutex::{raw::NoopRawMutex, NoopMutex};
 use embassy_sync::signal::Signal;
 use embassy_time::Timer;
 
+use static_cell::StaticCell;
+
 use lis3dsh::RawAccel;
 
-use static_cell::StaticCell;
+use micromath::F32Ext;
 
 use defmt::*;
 use {defmt_rtt as _, panic_probe as _};
@@ -109,7 +110,6 @@ async fn accel_task(
     loop {
         let raw_accel = unwrap!(accel.read_raw_accel());
         RAW_ACCEL_SIGNAL.signal(raw_accel);
-        info!("{:?}", raw_accel);
         Timer::after_millis(10).await;
     }
 }
@@ -151,14 +151,9 @@ async fn led_task(
     // Above this, there is no visible difference to the brightness of the LEDs.
     max_duty /= 4.0;
 
-    let mut set_north =
-        |intensity: f32| pwm.set_duty(timer::Channel::Ch2, (intensity * max_duty) as u16);
-    let mut set_east =
-        |intensity: f32| pwm.set_duty(timer::Channel::Ch3, (intensity * max_duty) as u16);
-    let mut set_south =
-        |intensity: f32| pwm.set_duty(timer::Channel::Ch4, (intensity * max_duty) as u16);
-    let mut set_west =
-        |intensity: f32| pwm.set_duty(timer::Channel::Ch1, (intensity * max_duty) as u16);
+    let mut set_led = |channel: timer::Channel, intensity: f32| {
+        pwm.set_duty(channel, (intensity * max_duty) as u16)
+    };
 
     // With the silkscreen upright, mini-USB at top:
     //
@@ -178,5 +173,12 @@ async fn led_task(
         let z = z as f32;
 
         let magnitude = (x.powi(2) + y.powi(2) + z.powi(2)).sqrt();
+
+        let intensity = (magnitude / (u16::MAX as f32) - 0.2).max(0.0);
+
+        set_led(timer::Channel::Ch1, intensity);
+        set_led(timer::Channel::Ch2, intensity);
+        set_led(timer::Channel::Ch3, intensity);
+        set_led(timer::Channel::Ch4, intensity);
     }
 }
