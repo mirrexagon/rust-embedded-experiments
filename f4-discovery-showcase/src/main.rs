@@ -39,6 +39,7 @@ use static_cell::StaticCell;
 
 use lis3dsh::RawAccel;
 
+use micromath::vector::{F32x3, Vector};
 use micromath::F32Ext;
 
 use defmt::*;
@@ -168,11 +169,13 @@ async fn led_task(
     loop {
         let RawAccel { x, y, z } = RAW_ACCEL_SIGNAL.wait().await;
 
-        let x = x as f32;
-        let y = y as f32;
-        let z = z as f32;
+        let raw_accel = F32x3 {
+            x: x as f32,
+            y: y as f32,
+            z: z as f32,
+        };
 
-        let magnitude = (x.powi(2) + y.powi(2) + z.powi(2)).sqrt();
+        let magnitude = raw_accel.magnitude();
 
         let intensity = (magnitude / (u16::MAX as f32) - 0.2).max(0.0);
 
