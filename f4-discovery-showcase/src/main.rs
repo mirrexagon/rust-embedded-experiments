@@ -40,7 +40,27 @@ use static_cell::StaticCell;
 use lis3dsh::RawAccel;
 
 use micromath::vector::{F32x3, Vector};
-use micromath::F32Ext;
+
+const VECTOR_XPOS: F32x3 = F32x3 {
+    x: 1.0,
+    y: 0.0,
+    z: 0.0,
+};
+const VECTOR_XNEG: F32x3 = F32x3 {
+    x: -1.0,
+    y: 0.0,
+    z: 0.0,
+};
+const VECTOR_YPOS: F32x3 = F32x3 {
+    x: 0.0,
+    y: 1.0,
+    z: 0.0,
+};
+const VECTOR_YNEG: F32x3 = F32x3 {
+    x: 0.0,
+    y: -1.0,
+    z: 0.0,
+};
 
 use defmt::*;
 use {defmt_rtt as _, panic_probe as _};
@@ -153,18 +173,20 @@ async fn led_task(
     max_duty /= 4.0;
 
     let mut set_led = |channel: timer::Channel, intensity: f32| {
-        pwm.set_duty(channel, (intensity * max_duty) as u16)
+        pwm.set_duty(channel, (intensity * max_duty).min(max_duty) as u16);
     };
 
     // With the silkscreen upright, mini-USB at top:
     //
-    // Tilt board so red LED (east) goes down , X increases
+    // Tilt board so red LED (east) goes down, X increases
     // Tilt board so blue LED (south) goes down, Y decreases
 
     // Let's model the LEDs as being on a plane one unit each from the origin.
     // A point is placed some distance above the origin
     // As the board rotates, the LED plane rotates to match, but the point stays stationary.
     // An LED's intensity is determined by its distance from the point - closer is more intense.
+
+    let gravity = 8900_f32;
 
     loop {
         let RawAccel { x, y, z } = RAW_ACCEL_SIGNAL.wait().await;
@@ -175,13 +197,14 @@ async fn led_task(
             z: z as f32,
         };
 
-        let magnitude = raw_accel.magnitude();
+        let magnitude_xpos = raw_accel.dot(VECTOR_XPOS) / gravity;
+        let magnitude_xneg = raw_accel.dot(VECTOR_XNEG) / gravity;
+        let magnitude_ypos = raw_accel.dot(VECTOR_YPOS) / gravity;
+        let magnitude_yneg = raw_accel.dot(VECTOR_YNEG) / gravity;
 
-        let intensity = (magnitude / (u16::MAX as f32) - 0.2).max(0.0);
-
-        set_led(timer::Channel::Ch1, intensity);
-        set_led(timer::Channel::Ch2, intensity);
-        set_led(timer::Channel::Ch3, intensity);
-        set_led(timer::Channel::Ch4, intensity);
+        set_led(timer::Channel::Ch3, magnitude_xpos);
+        set_led(timer::Channel::Ch1, magnitude_xneg);
+        set_led(timer::Channel::Ch2, magnitude_ypos);
+        set_led(timer::Channel::Ch4, magnitude_yneg);
     }
 }
